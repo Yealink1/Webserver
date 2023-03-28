@@ -1,0 +1,79 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+#include <TimeLib.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+const char* ssid = "Noooode";
+const char* password = "wasdafsfwasfa21241";
+
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 3600, 60000);
+ESP8266WebServer server(80);
+
+// Datenleitung des DS18B20 an Pin D1 anschließen
+#define ONE_WIRE_BUS D1
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+float temperatureC;
+
+void handleEndpoint1() {
+  server.send(200, "text/plain", "Hello World.");
+}
+
+void handleEndpoint2() {
+  timeClient.update(); // Update time from NTP server
+  String datetime = "28.03.2023 " + timeClient.getFormattedTime();
+  server.send(200, "text/plain", "Aktuelle Zeit in Berlin: " + datetime);
+}
+
+void handleEndpoint3() {
+  sensors.requestTemperatures(); // DS18B20 auslesen
+  temperatureC = sensors.getTempCByIndex(0); // Temperatur in Celsius auslesen
+  String tempString = String(temperatureC) + " °C"; // Temperatur als String formatieren
+  server.send(200, "text/plain", "Temperatur: " + tempString);
+}
+
+void handleRoot() {
+  String html = "<html><body>";
+  html += "<h1>Willkommen!</h1>";
+  html += "<p>Bitte wählen Sie eine Funktion zu der sie wollen:</p>";
+  html += "<a href='/endpoint1'><button>Hello World</button></a><br><br>";
+  html += "<a href='/endpoint2'><button>Datum/Uhrzeit</button></a><br><br>";
+  html += "<a href='/endpoint3'><button>Temperaturen Messung</button></a><br><br>";
+  html += "</body></html>";
+  server.send(200, "text/html", html);
+}
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Setze das Datum auf den 28. März 2023
+  setTime(0, 0, 0, 28, 3, 2023);
+
+  timeClient.begin(); // Start NTP client
+
+  sensors.begin(); // Starte die Kommunikation mit dem DS18B20-Sensor
+
+  server.on("/", handleRoot);
+  server.on("/endpoint1", handleEndpoint1);
+  server.on("/endpoint2", handleEndpoint2);
+  server.on("/endpoint3", handleEndpoint3);
+
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+}
